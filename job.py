@@ -19,7 +19,7 @@ from __future__ import annotations
 import base64
 import logging
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytz
@@ -66,6 +66,32 @@ def _mark_sent_today() -> None:
 
     config.SENT_FLAG_PATH.write_text(
         today_str,
+        encoding="utf-8",
+    )
+
+
+def _current_week_key() -> str:
+    today = datetime.now(TARGET_TZ).date()
+    week_start = today - timedelta(days=today.weekday())
+    return week_start.strftime("%Y-%m-%d")
+
+
+def already_sent_weekly_update() -> bool:
+    """Check if this week's outlook has already been sent."""
+    if not config.WEEKLY_SENT_FLAG_PATH.exists():
+        return False
+
+    last_sent = config.WEEKLY_SENT_FLAG_PATH.read_text(
+        encoding="utf-8"
+    ).strip()
+
+    return last_sent == _current_week_key()
+
+
+def _mark_weekly_sent() -> None:
+    """Mark this week's outlook as sent."""
+    config.WEEKLY_SENT_FLAG_PATH.write_text(
+        _current_week_key(),
         encoding="utf-8",
     )
 
@@ -163,6 +189,72 @@ def run_daily_job() -> bool:
     logger.info(
         "Daily job completed successfully for %s.",
         today_str,
+    )
+
+    return True
+
+
+def run_weekly_job() -> bool:
+    """
+    Send a current-week outlook to Telegram.
+
+    This is separate from the daily job, so the bot can send the weekly
+    planning message once per week and still send the daily morning update.
+    """
+    today = datetime.now(TARGET_TZ).date()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    week_start_str = week_start.strftime("%Y-%m-%d")
+    week_end_str = week_end.strftime("%Y-%m-%d")
+
+    if already_sent_weekly_update():
+        logger.info(
+            "Weekly outlook for week starting %s already sent.",
+            week_start_str,
+        )
+        return True
+
+    logger.info(
+        "Running weekly outlook job for %s to %s",
+        week_start_str,
+        week_end_str,
+    )
+
+    try:
+        raw_events = scraper.get_week_events()
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "Weekly scraping failed entirely: %s",
+            exc,
+            exc_info=True,
+        )
+        raw_events = []
+
+    scraper.save_week_events_json(raw_events)
+    filtered_events = formatter.filter_events(raw_events)
+
+    message = formatter.build_weekly_message(
+        filtered_events,
+        week_start=week_start_str,
+        week_end=week_end_str,
+    )
+
+    sent_ok = telegram_bot.send_message_chunked(message)
+
+    if not sent_ok:
+        logger.error(
+            "FAILED to send weekly outlook for %s to %s.",
+            week_start_str,
+            week_end_str,
+        )
+        return False
+
+    _mark_weekly_sent()
+
+    logger.info(
+        "Weekly outlook completed successfully for %s to %s.",
+        week_start_str,
+        week_end_str,
     )
 
     return True

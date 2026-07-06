@@ -1,8 +1,9 @@
 # Forex Economic Calendar Reminder Bot
 
-Automatically scrapes today's Forex economic calendar events and sends a
-clean, formatted summary to a Telegram chat every morning at **6:00 AM
-GMT+08:00**.
+Automatically scrapes Forex economic calendar events and sends:
+
+- a weekly outlook for the full current week
+- a clean daily Telegram summary every morning at **6:00 AM GMT+08:00**
 
 ```
 📅 Forex Events — 2026-07-02 (GMT+8)
@@ -71,7 +72,7 @@ forex-calendar-bot/
 ├── docker-compose.yml
 ├── forex-calendar-bot.service  # systemd unit
 ├── run_once_cron.sh            # plain-cron alternative to scheduler.py
-├── data/                       # events_today.json, last_sent_date.txt, jobs.sqlite
+├── data/                       # events_today.json, events_week.json, sent flags, jobs.sqlite
 ├── exports/                    # daily forex_events_YYYY-MM-DD.ics files (auto-cleaned after 24h)
 └── logs/                       # scraper.log, telegram.log, scheduler.log
 ```
@@ -138,6 +139,9 @@ installs Google Chrome for you.
 | `TELEGRAM_CHAT_ID` | — | Required. Target chat/user/group ID. |
 | `TIMEZONE` | `Asia/Singapore` | GMT+08:00, no DST. |
 | `SEND_HOUR` / `SEND_MINUTE` | `6` / `0` | Daily send time in `TIMEZONE`. |
+| `ENABLE_WEEKLY_UPDATE` | `true` | Send a weekly outlook in addition to the daily message. |
+| `WEEKLY_SEND_DAY` | `0` | Weekly outlook day: Monday is `0`, Sunday is `6`. |
+| `WEEKLY_SEND_HOUR` / `WEEKLY_SEND_MINUTE` | daily send time | Weekly outlook send time in `TIMEZONE`. |
 | `FF_JSON_URL` | Forex Factory JSON feed | Primary data source. |
 | `FF_CALENDAR_URL` | forexfactory.com/calendar | Fallback scrape target. |
 | `ENABLE_SELENIUM_FALLBACK` | `true` | Set `false` to disable the HTML fallback entirely. |

@@ -1,8 +1,8 @@
 """
 scraper.py
 ----------
-Collects economic calendar events for the CURRENT DAY (in the configured
-timezone, default GMT+08:00).
+Collects economic calendar events for the current day or current week (in the
+configured timezone, default GMT+08:00).
 
 Strategy (in order):
   1. PRIMARY:  Fetch Forex Factory's public JSON feed (ff_calendar_thisweek.json).
@@ -31,7 +31,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 
 import pytz
@@ -107,10 +107,31 @@ def _parse_ff_json_datetime(raw_date: str) -> Optional[datetime]:
         return None
 
 
-def fetch_events_from_json(today: date) -> List[Dict[str, Any]]:
+def _event_from_feed_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Normalize one Forex Factory JSON item into the project event shape."""
+    title = item.get("title") or item.get("event") or ""
+    currency = (item.get("country") or item.get("currency") or "").upper()
+    raw_impact = item.get("impact", "")
+    raw_date = item.get("date", "")
+
+    dt_local = _parse_ff_json_datetime(raw_date)
+    if dt_local is None:
+        logger.debug("Skipping event with unparseable date: %r", item)
+        return None
+
+    return {
+        "date": dt_local.strftime("%Y-%m-%d"),
+        "time": dt_local.strftime("%H:%M"),
+        "currency": currency or "N/A",
+        "impact": _normalize_impact(raw_impact),
+        "event": title.strip() or "Unnamed Event",
+    }
+
+
+def fetch_events_from_json_for_range(start_date: date, end_date: date) -> List[Dict[str, Any]]:
     """
     PRIMARY scraping path: pull the week's events from Forex Factory's public
-    JSON feed and filter down to `today` in the target timezone.
+    JSON feed and filter down to a date range in the target timezone.
     """
     session = _build_session()
     logger.info("Fetching calendar JSON from %s", config.FF_JSON_URL)
@@ -124,34 +145,24 @@ def fetch_events_from_json(today: date) -> List[Dict[str, Any]]:
 
     events: List[Dict[str, Any]] = []
     for item in raw_events:
-        # Typical keys in this feed: title, country, date, impact, forecast,
-        # previous. Field names have varied slightly over time, so we probe
-        # a few possibilities defensively.
-        title = item.get("title") or item.get("event") or ""
-        currency = (item.get("country") or item.get("currency") or "").upper()
-        raw_impact = item.get("impact", "")
-        raw_date = item.get("date", "")
-
-        dt_local = _parse_ff_json_datetime(raw_date)
-        if dt_local is None:
-            logger.debug("Skipping event with unparseable date: %r", item)
+        event = _event_from_feed_item(item)
+        if event is None:
             continue
 
-        if dt_local.date() != today:
+        event_date = datetime.strptime(event["date"], "%Y-%m-%d").date()
+        if not start_date <= event_date <= end_date:
             continue
 
-        events.append(
-            {
-                "date": dt_local.strftime("%Y-%m-%d"),
-                "time": dt_local.strftime("%H:%M"),
-                "currency": currency or "N/A",
-                "impact": _normalize_impact(raw_impact),
-                "event": title.strip() or "Unnamed Event",
-            }
-        )
+        events.append(event)
 
-    logger.info("JSON feed returned %d event(s) for %s", len(events), today)
+    events.sort(key=lambda ev: (ev.get("date", ""), ev.get("time", ""), ev.get("currency", "")))
+    logger.info("JSON feed returned %d event(s) for %s to %s", len(events), start_date, end_date)
     return events
+
+
+def fetch_events_from_json(today: date) -> List[Dict[str, Any]]:
+    """Return JSON-feed events for one target-timezone date."""
+    return fetch_events_from_json_for_range(today, today)
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +354,40 @@ def get_today_events() -> List[Dict[str, Any]]:
         return []
 
 
+def get_week_events() -> List[Dict[str, Any]]:
+    """
+    Return current-week economic calendar events in the target timezone.
+
+    The week starts on Monday and ends on Sunday.
+    """
+    today = datetime.now(TARGET_TZ).date()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    try:
+        events = fetch_events_from_json_for_range(week_start, week_end)
+        if events:
+            return _dedupe(events)
+        logger.warning("JSON feed returned zero events for this week")
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Weekly JSON scrape failed: %s", exc, exc_info=True)
+
+    if not config.ENABLE_SELENIUM_FALLBACK:
+        logger.warning("Selenium fallback disabled; returning empty weekly event list")
+        return []
+
+    weekly_events: List[Dict[str, Any]] = []
+    current_date = week_start
+    while current_date <= week_end:
+        try:
+            weekly_events.extend(fetch_events_from_html(current_date))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Weekly HTML scrape failed for %s: %s", current_date, exc, exc_info=True)
+        current_date += timedelta(days=1)
+
+    return _dedupe(weekly_events)
+
+
 def _dedupe(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Remove exact duplicate event rows (can happen with feed quirks)."""
     seen = set()
@@ -360,3 +405,10 @@ def save_events_json(events: List[Dict[str, Any]]) -> None:
     with open(config.EVENTS_JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(events, f, indent=2, ensure_ascii=False)
     logger.info("Saved %d event(s) to %s", len(events), config.EVENTS_JSON_PATH)
+
+
+def save_week_events_json(events: List[Dict[str, Any]]) -> None:
+    """Persist weekly events to disk as JSON (for auditing / debugging)."""
+    with open(config.WEEK_EVENTS_JSON_PATH, "w", encoding="utf-8") as f:
+        json.dump(events, f, indent=2, ensure_ascii=False)
+    logger.info("Saved %d weekly event(s) to %s", len(events), config.WEEK_EVENTS_JSON_PATH)

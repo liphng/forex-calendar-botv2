@@ -48,6 +48,12 @@ TIMEZONE: str = os.getenv("TIMEZONE", "Asia/Singapore")  # GMT+8, no DST
 SEND_HOUR: int = int(os.getenv("SEND_HOUR", "6"))
 SEND_MINUTE: int = int(os.getenv("SEND_MINUTE", "0"))
 
+# Weekly outlook schedule. Monday is 0, Sunday is 6.
+ENABLE_WEEKLY_UPDATE: bool = _get_bool("ENABLE_WEEKLY_UPDATE", True)
+WEEKLY_SEND_DAY: int = int(os.getenv("WEEKLY_SEND_DAY", "0"))
+WEEKLY_SEND_HOUR: int = int(os.getenv("WEEKLY_SEND_HOUR", str(SEND_HOUR)))
+WEEKLY_SEND_MINUTE: int = int(os.getenv("WEEKLY_SEND_MINUTE", str(SEND_MINUTE)))
+
 # ---------------------------------------------------------------------------
 # Data source
 # ---------------------------------------------------------------------------
@@ -91,7 +97,9 @@ CURRENCY_FILTER: List[str] = _get_list(
 DATA_DIR: Path = BASE_DIR / "data"
 LOG_DIR: Path = BASE_DIR / "logs"
 EVENTS_JSON_PATH: Path = DATA_DIR / "events_today.json"
+WEEK_EVENTS_JSON_PATH: Path = DATA_DIR / "events_week.json"
 SENT_FLAG_PATH: Path = DATA_DIR / "last_sent_date.txt"
+WEEKLY_SENT_FLAG_PATH: Path = DATA_DIR / "last_weekly_sent.txt"
 
 DATA_DIR.mkdir(exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)

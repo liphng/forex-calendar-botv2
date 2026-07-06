@@ -172,3 +172,65 @@ def build_message(events: List[Dict[str, Any]], display_date: str) -> str:
     while "\n\n\n" in message:
         message = message.replace("\n\n\n", "\n\n")
     return message.strip()
+
+
+def build_weekly_message(
+    events: List[Dict[str, Any]],
+    week_start: str,
+    week_end: str,
+) -> str:
+    """
+    Build a Telegram message for the full week's filtered events, grouped by
+    date and then impact.
+    """
+    header = f"📅 *Forex Weekly Outlook — {week_start} to {week_end} (GMT+8)*"
+
+    if not events:
+        return (
+            f"{header}\n\n"
+            "No high/medium impact events scheduled for this week. ✅\n\n"
+            f"_Data Source: {config.DATA_SOURCE_LABEL}_"
+        )
+
+    by_date: Dict[str, List[Dict[str, Any]]] = {}
+    for ev in events:
+        by_date.setdefault(ev.get("date", "Unknown Date"), []).append(ev)
+
+    lines = [header, ""]
+
+    for event_date in sorted(by_date):
+        try:
+            date_label = datetime.strptime(event_date, "%Y-%m-%d").strftime("%a, %b %-d")
+        except ValueError:
+            date_label = event_date
+
+        day_events = by_date[event_date]
+        lines.append(f"*{date_label}*")
+
+        for impact in IMPACT_ORDER:
+            impact_events = [
+                ev for ev in day_events if ev.get("impact") == impact
+            ]
+            if not impact_events:
+                continue
+
+            impact_events.sort(key=lambda ev: ev.get("time", ""))
+            lines.append(IMPACT_HEADER.get(impact, impact.upper()))
+
+            for ev in impact_events:
+                time_display = _format_time_12h(ev.get("time", ""))
+                currency = ev.get("currency", "N/A")
+                title = ev.get("event", "Unnamed Event")
+                summary = get_event_summary(title)
+                lines.append(f"{time_display} — {currency} — {title}")
+                lines.append(f"Brief: {summary}")
+                lines.append("")
+
+        lines.append("")
+
+    lines.append(f"_Data Source: {config.DATA_SOURCE_LABEL}_")
+
+    message = "\n".join(lines)
+    while "\n\n\n" in message:
+        message = message.replace("\n\n\n", "\n\n")
+    return message.strip()
