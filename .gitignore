@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+data/*.json
+data/*.txt
+data/*.sqlite
+logs/*.log
+exports/*.ics
+venv/

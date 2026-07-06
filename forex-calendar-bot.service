@@ -1,0 +1,28 @@
+[Unit]
+Description=Forex Economic Calendar Reminder Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# --- Edit these three paths/user for your VPS ---
+User=forexbot
+WorkingDirectory=/opt/forex-calendar-bot
+ExecStart=/opt/forex-calendar-bot/venv/bin/python /opt/forex-calendar-bot/main.py
+
+Restart=always
+RestartSec=10
+
+# Restart cleanly if the process is somehow killed (OOM, etc.)
+StartLimitIntervalSec=0
+
+# Give it a reasonable amount of time to shut down cleanly
+TimeoutStopSec=20
+
+# Optional hardening (uncomment if your distro supports these)
+# NoNewPrivileges=true
+# ProtectSystem=full
+# PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

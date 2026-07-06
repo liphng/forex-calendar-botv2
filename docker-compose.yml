@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  forex-calendar-bot:
+    build: .
+    container_name: forex-calendar-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    # Health signal: the scheduler process should stay running; Docker's
+    # restart policy handles crash recovery automatically.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"

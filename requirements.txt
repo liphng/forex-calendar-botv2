@@ -1,0 +1,24 @@
+# Core
+python-dotenv==1.0.1
+pytz==2024.1
+
+# HTTP / scraping (primary path)
+requests==2.32.3
+urllib3==2.2.2
+beautifulsoup4==4.12.3
+
+# Scraping fallback (headless browser)
+selenium==4.22.0
+# playwright==1.45.0        # optional alternative fallback engine — see README
+webdriver-manager==4.0.2
+
+# Telegram
+python-telegram-bot==21.4
+
+# .ics calendar generation (Apple Calendar / iPhone / Google Calendar import)
+icalendar==5.0.13
+GitPython==3.1.43
+
+# Scheduling
+APScheduler==3.10.4
+SQLAlchemy==2.0.31        # required by APScheduler's SQLAlchemyJobStore
